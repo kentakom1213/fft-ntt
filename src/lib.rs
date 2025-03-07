@@ -1,2 +1,2 @@
-mod fft;
-mod num;
+pub mod fft;
+pub mod num;

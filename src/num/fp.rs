@@ -10,12 +10,12 @@ pub struct Fp {
     /// root の逆元
     pub rinv: u64,
     /// (p-1) に素因数として含まれる 2 の個数
-    count_2: usize,
+    pub count_2: usize,
 }
 
 impl Fp {
     /// 初期化する
-    fn new(p: u64) -> Result<Self, &'static str> {
+    pub fn new(p: u64) -> Result<Self, &'static str> {
         // p は素数である必要がある
         if Fp::factorize(p).len() > 1 {
             return Err("`p` should be prime number.");
