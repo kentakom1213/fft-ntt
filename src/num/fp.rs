@@ -1,7 +1,5 @@
 //! 有限体の実装
 
-use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
-
 /// 有限体の実装
 #[derive(Debug)]
 pub struct Fp {
@@ -11,27 +9,49 @@ pub struct Fp {
     pub root: u64,
     /// root の逆元
     pub rinv: u64,
+    /// (p-1) に素因数として含まれる 2 の個数
+    count_2: usize,
 }
 
 impl Fp {
     /// 初期化する
     fn new(p: u64) -> Result<Self, &'static str> {
+        // p は素数である必要がある
+        if Fp::factorize(p).len() > 1 {
+            return Err("`p` should be prime number.");
+        }
+
+        // (p - 1) を素因数分解
+        let factors = Fp::factorize(p - 1);
+
+        // 原始根を探索
+        let root = Self::find_root(p, &factors);
+
+        // (p-1) に素因数として含まれる 2 の個数
+        let count_2 = factors[0].1 as usize;
+
         Ok(Self {
             p,
-            root: 0,
-            rinv: 0,
+            root,
+            rinv: Self::_inv(p, root),
+            count_2,
         })
     }
 
-    // /// Fpの原始根を探索する
-    // fn find_root(p: u64, factors: &Vec<(u64, u64)>) -> u64 {
-    //     // x が Fp の原始根であるか判定する
-    //     let is_ok = |x: u64| {
-    //         factors.iter().all(|&(pi, _)| {
-    //             x.pow((p - 1) / pi)
-    //         })
-    //     };
-    // }
+    /// Fpの原始根を探索する
+    fn find_root(p: u64, factors: &Vec<(u64, u64)>) -> u64 {
+        // x が Fp の原始根であるか判定する
+        let is_ok = |x: u64| {
+            factors
+                .iter()
+                .all(|&(pi, _)| Self::_pow(p, x, (p - 1) / pi) != 0)
+        };
+
+        (1..p)
+            .find(|x| is_ok(*x))
+            // 原始根の存在性より
+            .unwrap()
+    }
 
     /// 素因数分解
     fn factorize(mut x: u64) -> Vec<(u64, u64)> {
@@ -62,65 +82,91 @@ impl Fp {
 
     // ===== 基本的な演算の実装 =====
     /// 0 <= a < p となるように正規化
-    fn normalize(&self, a: u64) -> u64 {
-        if a < self.p {
+    fn normalize(p: u64, a: u64) -> u64 {
+        if a < p {
             return a;
         }
-        a % self.p
+        a % p
     }
 
     /// a + b (mod p)
-    pub fn add(&self, a: u64, b: u64) -> u64 {
-        let a = self.normalize(a);
-        let b = self.normalize(b);
+    fn _add(p: u64, a: u64, b: u64) -> u64 {
+        let a = Self::normalize(p, a);
+        let b = Self::normalize(p, b);
 
         let mut res = a + b;
-        if res >= self.p {
-            res -= self.p;
+        if res >= p {
+            res -= p;
         }
         res
     }
 
     /// - a (mod p)
-    pub fn neg(&self, a: u64) -> u64 {
-        let a = self.normalize(a);
+    fn _neg(p: u64, a: u64) -> u64 {
+        let a = Self::normalize(p, a);
 
-        self.p - a
+        p - a
     }
 
     /// a - b (mod p)
-    pub fn sub(&self, a: u64, b: u64) -> u64 {
-        let a = self.normalize(a);
-        let b = self.normalize(b);
+    fn _sub(p: u64, a: u64, b: u64) -> u64 {
+        let a = Self::normalize(p, a);
+        let b = Self::normalize(p, b);
 
-        self.add(a, self.neg(b))
+        Self::_add(p, a, Self::_neg(p, b))
     }
 
     /// a * b (mod p)
-    pub fn mul(&self, a: u64, b: u64) -> u64 {
-        let a = self.normalize(a);
-        let b = self.normalize(b);
+    fn _mul(p: u64, a: u64, b: u64) -> u64 {
+        let a = Self::normalize(p, a);
+        let b = Self::normalize(p, b);
 
-        a * b % self.p
+        a * b % p
     }
 
     /// a ^ b (mod p)
-    pub fn pow(&self, a: u64, mut b: u64) -> u64 {
-        let mut a = self.normalize(a);
+    fn _pow(p: u64, a: u64, mut b: u64) -> u64 {
+        let mut a = Self::normalize(p, a);
         let mut res = 1;
         while b > 0 {
             if b & 1 == 1 {
-                res = self.mul(res, a);
+                res = Self::_mul(p, res, a);
             }
-            a = self.mul(a, a);
+            a = Self::_mul(p, a, a);
             b >>= 1;
         }
         res
     }
 
     /// a^(-1) mod p
+    fn _inv(p: u64, a: u64) -> u64 {
+        Self::_pow(p, a, p - 2)
+    }
+
+    // ===== 公開する演算 =====
+    /// a + b (mod p)
+    pub fn add(&self, a: u64, b: u64) -> u64 {
+        Self::_add(self.p, a, b)
+    }
+    /// -a (mod p)
+    pub fn neg(&self, a: u64) -> u64 {
+        Self::_neg(self.p, a)
+    }
+    /// a - b (mod p)
+    pub fn sub(&self, a: u64, b: u64) -> u64 {
+        Self::_sub(self.p, a, b)
+    }
+    /// a * b (mod p)
+    pub fn mul(&self, a: u64, b: u64) -> u64 {
+        Self::_mul(self.p, a, b)
+    }
+    /// a ^ b (mod p)
+    pub fn pow(&self, a: u64, b: u64) -> u64 {
+        Self::_pow(self.p, a, b)
+    }
+    /// a^(-1) (mod p)
     pub fn inv(&self, a: u64) -> u64 {
-        self.pow(a, self.p - 2)
+        Self::_inv(self.p, a)
     }
 }
 
