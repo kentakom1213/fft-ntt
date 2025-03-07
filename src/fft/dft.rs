@@ -7,20 +7,29 @@ pub struct DFT(Fp);
 
 impl DFT {
     /// 入力された配列をフーリエ変換する
-    pub fn dft(&self, array: &[u64]) -> Result<Vec<u64>, &'static str> {
+    pub fn dft(&self, X: &[u64]) -> Result<Vec<u64>, &'static str> {
         todo!()
     }
 
     /// 入力された配列をフーリエ逆変換する
-    pub fn idft(&self, array: &[u64]) -> Result<Vec<u64>, &'static str> {
+    pub fn idft(&self, F: &[u64]) -> Result<Vec<u64>, &'static str> {
         todo!()
     }
 
     /// フーリエ変換，フーリエ逆変換の共通部分
     ///
-    /// - `W`: 回転演算子
-    fn dft_inner(&self, array: &[u64], W: u64) -> Result<Vec<u64>, &'static str> {
-        todo!()
+    /// - `w`: 回転演算子
+    fn dft_inner(&self, X: &Vec<u64>, w: u64) -> Vec<u64> {
+        let n = X.len();
+        let mut res = vec![0; n];
+
+        for i in 0..n {
+            for j in 0..n {
+                todo!()
+            }
+        }
+
+        res
     }
 
     /// 長さが 2 べきになるように配列を生成する
