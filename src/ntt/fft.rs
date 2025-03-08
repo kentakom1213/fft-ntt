@@ -3,7 +3,7 @@
 use crate::num::Fp;
 
 /// 高速フーリエ変換の実装
-pub struct FFT(Fp);
+pub struct FFT(pub Fp);
 
 impl FFT {
     /// 入力された配列をフーリエ変換する
