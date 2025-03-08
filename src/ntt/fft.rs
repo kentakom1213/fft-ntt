@@ -1,26 +1,26 @@
-//! 離散フーリエ変換の実装
+//! 高速フーリエ変換の実装
 
 use crate::num::Fp;
 
-/// 離散フーリエ変換の実装
-pub struct DFT(Fp);
+/// 高速フーリエ変換の実装
+pub struct FFT(Fp);
 
-impl DFT {
+impl FFT {
     /// 入力された配列をフーリエ変換する
-    pub fn dft(&self, X: &[u64]) -> Result<Vec<u64>, &'static str> {
+    pub fn fft(&self, X: &[u64]) -> Result<Vec<u64>, &'static str> {
         let (i, X) = self.extend_array(X)?;
         let w = self.0.root_pow2m(i)?;
 
-        Ok(self.dft_core(X, w))
+        Ok(self.fft_core(X, w))
     }
 
     /// 入力された配列をフーリエ逆変換する
-    pub fn idft(&self, F: &[u64]) -> Result<Vec<u64>, &'static str> {
+    pub fn ifft(&self, F: &[u64]) -> Result<Vec<u64>, &'static str> {
         let (i, F) = self.extend_array(F)?;
         let w = self.0.root_pow2m(i)?;
         let winv = self.0.inv(w);
 
-        let mut res = self.dft_core(F, winv);
+        let mut res = self.fft_core(F, winv);
         let n = res.len();
 
         // 逆変換後の配列を正規化
@@ -33,18 +33,35 @@ impl DFT {
     /// フーリエ変換，フーリエ逆変換の共通部分
     ///
     /// - `w`: 回転演算子
-    fn dft_core(&self, X: Vec<u64>, w: u64) -> Vec<u64> {
+    fn fft_core(&self, X: Vec<u64>, w: u64) -> Vec<u64> {
         let n = X.len();
 
-        (0..n)
+        if n == 1 {
+            return X.to_vec();
+        }
+
+        let (X_even, X_odd): (Vec<u64>, Vec<u64>) = (0..n / 2)
             .map(|i| {
-                (0..n)
-                    .map(|j| {
-                        let rot = self.0.pow(w, i * j);
-                        self.0.mul(X[j], rot)
-                    })
-                    .fold(0, |acc, v| self.0.add(acc, v))
+                let l = X[i];
+                let r = X[i + n / 2];
+                (
+                    self.0.add(l, r),
+                    self.0.mul(self.0.sub(l, r), self.0.pow(w, i)),
+                )
             })
+            .collect();
+
+        // 再帰的にFFT
+        let new_w = self.0.pow(w, 2);
+
+        let Y_even = self.fft_core(X_even, new_w);
+        let Y_odd = self.fft_core(X_odd, new_w);
+
+        // マージ
+        Y_even
+            .into_iter()
+            .zip(Y_odd.into_iter())
+            .flat_map(|(e, o)| [e, o])
             .collect()
     }
 
@@ -84,7 +101,7 @@ mod test {
 
     use crate::num::Fp;
 
-    use super::DFT;
+    use super::FFT;
 
     #[test]
     fn test_extend_array() {
@@ -93,27 +110,27 @@ mod test {
         let arr_3 = vec![1, 2, 3, 4, 5];
 
         let fp = Fp::new(5).unwrap();
-        let dft = DFT(fp);
+        let fft = FFT(fp);
 
-        assert_eq!(dft.extend_array(&arr_1), Ok((2, vec![1, 2, 3, 0])));
-        assert_eq!(dft.extend_array(&arr_2), Ok((2, vec![1, 2, 3, 4])));
-        assert!(dft.extend_array(&arr_3).is_err());
+        assert_eq!(fft.extend_array(&arr_1), Ok((2, vec![1, 2, 3, 0])));
+        assert_eq!(fft.extend_array(&arr_2), Ok((2, vec![1, 2, 3, 4])));
+        assert!(fft.extend_array(&arr_3).is_err());
     }
 
     #[test]
-    fn test_dft() {
+    fn test_fft() {
         {
             let arr = vec![1, 2, 3, 4];
             let fp = Fp::new(5).unwrap();
             eprintln!("\nfp = {:?}", fp);
 
-            let dft = DFT(fp);
+            let fft = FFT(fp);
 
-            let res = dft.dft(&arr).unwrap();
-            eprintln!("dft({:?}) = {:?}", arr, res);
+            let res = fft.fft(&arr).unwrap();
+            eprintln!("fft({:?}) = {:?}", arr, res);
 
-            let res2 = dft.idft(&res).unwrap();
-            eprintln!("idft({:?}) = {:?}", res, res2);
+            let res2 = fft.ifft(&res).unwrap();
+            eprintln!("ifft({:?}) = {:?}", res, res2);
 
             assert_eq!(res2, arr);
         }
@@ -124,13 +141,13 @@ mod test {
 
             eprintln!("\nfp = {:?}", fp);
 
-            let dft = DFT(fp);
+            let fft = FFT(fp);
 
-            let res = dft.dft(&arr).unwrap();
-            eprintln!("dft({:?}) = {:?}", arr, res);
+            let res = fft.fft(&arr).unwrap();
+            eprintln!("fft({:?}) = {:?}", arr, res);
 
-            let res2 = dft.idft(&res).unwrap();
-            eprintln!("idft({:?}) = {:?}", res, res2);
+            let res2 = fft.ifft(&res).unwrap();
+            eprintln!("ifft({:?}) = {:?}", res, res2);
 
             let arr_ext = vec![3, 1, 4, 1, 5, 9, 0, 0];
             assert_eq!(res2, arr_ext);
@@ -142,13 +159,13 @@ mod test {
 
             eprintln!("\nfp = {:?}", fp);
 
-            let dft = DFT(fp);
+            let fft = FFT(fp);
 
-            let res = dft.dft(&arr).unwrap();
-            eprintln!("dft({:?}) = {:?}", arr, res);
+            let res = fft.fft(&arr).unwrap();
+            eprintln!("fft({:?}) = {:?}", arr, res);
 
-            let res2 = dft.idft(&res).unwrap();
-            eprintln!("idft({:?}) = {:?}", res, res2);
+            let res2 = fft.ifft(&res).unwrap();
+            eprintln!("ifft({:?}) = {:?}", res, res2);
 
             let arr_ext = vec![31415, 92653, 58979, 32384, 62643, 38327, 95028, 0];
             assert_eq!(res2, arr_ext);
@@ -163,13 +180,13 @@ mod test {
 
             eprintln!("\nfp = {:?}", fp);
 
-            let dft = DFT(fp);
+            let fft = FFT(fp);
 
-            let res = dft.dft(&arr).unwrap();
-            eprintln!("dft({:?}) = {:?}", arr, res);
+            let res = fft.fft(&arr).unwrap();
+            eprintln!("fft({:?}) = {:?}", arr, res);
 
-            let res2 = dft.idft(&res).unwrap();
-            eprintln!("idft({:?}) = {:?}", res, res2);
+            let res2 = fft.ifft(&res).unwrap();
+            eprintln!("ifft({:?}) = {:?}", res, res2);
 
             assert_eq!(res2, arr);
         }
@@ -183,17 +200,21 @@ mod test {
         case(3000, 5767169),
         case(500, 998244353),
         case(500, 998244353),
-        case(3000, 998244353)
+        case(3000, 998244353),
+        // too large case
+        case(200000, 998244353),
+        case(200000, 998244353),
+        case(200000, 998244353),
     )]
-    fn test_dft_large(size: usize, p: u64) {
+    fn test_fft_large(size: usize, p: u64) {
         let mut rng = rng();
 
         let arr: Vec<u64> = (0..size).map(|_| rng.random_range(0..p)).collect();
 
-        let dft = DFT(Fp::new(p).unwrap());
+        let dft = FFT(Fp::new(p).unwrap());
 
-        let res = dft.dft(&arr).unwrap();
-        let res2 = dft.idft(&res).unwrap();
+        let res = dft.fft(&arr).unwrap();
+        let res2 = dft.ifft(&res).unwrap();
 
         assert_eq!(&res2[..size], arr);
     }
